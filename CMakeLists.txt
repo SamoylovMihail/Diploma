@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8)
-project(highgui)
+project(facedetect)
 find_package(OpenCV REQUIRED)
-add_executable(highgui main.cpp)
-target_link_libraries(highgui ${OpenCV_LIBS})
+add_executable(facedetect facedetect.cpp)
+target_link_libraries(facedetect ${OpenCV_LIBS})
