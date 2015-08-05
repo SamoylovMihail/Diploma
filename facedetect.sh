@@ -1,5 +1,5 @@
 #!/bin/bash
 
 cd ../binary
-cmake ../source
+cmake ../source/$1
 make
