@@ -1,0 +1,115 @@
+#include "opencv2/opencv.hpp"
+
+#include <cctype>
+#include <iostream>
+#include <iterator>
+#include <stdio.h>
+
+using namespace std;
+using namespace cv;
+
+void detectAndCut( Mat& img, CascadeClassifier& cascade,
+                    CascadeClassifier& nestedCascade,
+                    double scale, bool tryflip );
+
+string cascadeName = "/usr/share/opencv/haarcascades/haarcascade_frontalface_alt.xml";
+string nestedCascadeName = "/usr/share/opencv/haarcascades/haarcascade_eye_tree_eyeglasses.xml";
+
+int main( int argc, const char** argv )
+{
+    CvCapture* capture = 0;
+    Mat frame, frameCopy, image;
+    const string scaleOpt = "--scale=";
+    size_t scaleOptLen = scaleOpt.length();
+    const string cascadeOpt = "--cascade=";
+    size_t cascadeOptLen = cascadeOpt.length();
+    const string nestedCascadeOpt = "--nested-cascade";
+    size_t nestedCascadeOptLen = nestedCascadeOpt.length();
+    const string tryFlipOpt = "--try-flip";
+    size_t tryFlipOptLen = tryFlipOpt.length();
+    string inputName;
+    bool tryflip = false;
+
+    CascadeClassifier cascade, nestedCascade;
+    double scale = 1;
+
+	inputName.assign( argv[1] );
+    if( !cascade.load( cascadeName ) )
+    {
+        cerr << "ERROR: Could not load classifier cascade" << endl;
+        return -1;
+    }
+
+   	if( inputName.size() )
+    {
+        image = imread( inputName, 1 );
+        if( image.empty() )
+        {
+            cout << "This is not an image" << endl;
+			return 1;
+        }
+    }
+    else
+    {
+        image = imread( "../data/lena.jpg", 1 );
+        if(image.empty()) cout << "Couldn't read ../data/lena.jpg" << endl;
+		return 2;
+    }
+
+    detectAndCut( image, cascade, nestedCascade, scale, tryflip );
+
+    return 0;
+}
+
+void detectAndCut( Mat& img, CascadeClassifier& cascade,
+                    CascadeClassifier& nestedCascade,
+                    double scale, bool tryflip )
+{
+    int i = 0;
+    vector<Rect> faces, faces2;
+    Mat gray, smallImg( cvRound (img.rows/scale), cvRound(img.cols/scale), CV_8UC1 );
+
+    cvtColor( img, gray, COLOR_BGR2GRAY );
+    resize( gray, smallImg, smallImg.size(), 0, 0, INTER_LINEAR );
+    equalizeHist( smallImg, smallImg );
+
+    cascade.detectMultiScale( smallImg, faces, 1.1, 2, 0 | CASCADE_SCALE_IMAGE, Size(30, 30) );
+    if( tryflip )
+    {
+        flip(smallImg, smallImg, 1);
+        cascade.detectMultiScale( smallImg, faces2,
+                                 1.1, 2, 0
+                                 //|CASCADE_FIND_BIGGEST_OBJECT
+                                 //|CASCADE_DO_ROUGH_SEARCH
+                                 |CASCADE_SCALE_IMAGE
+                                 ,
+                                 Size(30, 30) );
+        for( vector<Rect>::const_iterator r = faces2.begin(); r != faces2.end(); r++ )
+        {
+            faces.push_back(Rect(smallImg.cols - r->x - r->width, r->y, r->width, r->height));
+        }
+    }
+    for( vector<Rect>::const_iterator r = faces.begin(); r != faces.end(); r++, i++ )
+    {
+        Mat smallImgROI;
+        vector<Rect> nestedObjects;
+		smallImgROI = smallImg(*r);
+		string face = "face_";
+		string ext = ".png";
+		char numstr[8];
+		sprintf(numstr, "%d", i);
+		string filename = face + numstr + ext;
+		imwrite(filename, smallImgROI);
+        if( nestedCascade.empty() )
+            continue;
+        nestedCascade.detectMultiScale( smallImgROI, nestedObjects,
+            1.1, 2, 0
+            //|CASCADE_FIND_BIGGEST_OBJECT
+            //|CASCADE_DO_ROUGH_SEARCH
+            //|CASCADE_DO_CANNY_PRUNING
+            |CASCADE_SCALE_IMAGE
+            ,
+            Size(30, 30) );
+    }
+}
+
