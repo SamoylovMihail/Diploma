@@ -1,16 +1,16 @@
 #include "opencv2/opencv.hpp"
-
 #include <cctype>
 #include <iostream>
 #include <iterator>
 #include <stdio.h>
+#include <dirent.h>
 
 using namespace std;
 using namespace cv;
 
-void detectAndCut( Mat& img, CascadeClassifier& cascade,
+void detectAndCut(Mat& img, CascadeClassifier& cascade,
                     CascadeClassifier& nestedCascade,
-                    double scale, bool tryflip );
+                    double scale, bool tryflip, char* imageName);
 
 string cascadeName = "/usr/share/opencv/haarcascades/haarcascade_frontalface_alt.xml";
 string nestedCascadeName = "/usr/share/opencv/haarcascades/haarcascade_eye_tree_eyeglasses.xml";
@@ -19,61 +19,69 @@ int main( int argc, const char** argv )
 {
     CvCapture* capture = 0;
     Mat frame, frameCopy, image;
-    const string scaleOpt = "--scale=";
-    size_t scaleOptLen = scaleOpt.length();
-    const string cascadeOpt = "--cascade=";
-    size_t cascadeOptLen = cascadeOpt.length();
-    const string nestedCascadeOpt = "--nested-cascade";
-    size_t nestedCascadeOptLen = nestedCascadeOpt.length();
-    const string tryFlipOpt = "--try-flip";
-    size_t tryFlipOptLen = tryFlipOpt.length();
     string inputName;
     bool tryflip = false;
 
     CascadeClassifier cascade, nestedCascade;
     double scale = 1;
 
-	inputName.assign( argv[1] );
-    if( !cascade.load( cascadeName ) )
+	if( !cascade.load( cascadeName ) )
     {
         cerr << "ERROR: Could not load classifier cascade" << endl;
         return -1;
     }
 
-   	if( inputName.size() )
-    {
-        image = imread( inputName, 1 );
-        if( image.empty() )
-        {
-            cout << "This is not an image" << endl;
-			return 1;
-        }
-    }
-    else
-    {
-        image = imread( "../data/lena.jpg", 1 );
-        if(image.empty()) cout << "Couldn't read ../data/lena.jpg" << endl;
-		return 2;
-    }
-
-    detectAndCut( image, cascade, nestedCascade, scale, tryflip );
+	DIR *dir;
+	struct dirent *ent;
+	if ((dir = opendir (argv[1])) != NULL) {
+		/* print all the files and directories within directory */
+		while ((ent = readdir (dir)) != NULL) {
+			string path = argv[1];
+			image = imread(path + ent->d_name, 1);
+			if(image.empty()) {
+            	continue;
+			}
+			cout << path + ent->d_name << endl;
+			detectAndCut(image, cascade, nestedCascade, scale, tryflip, ent->d_name);
+		}
+		closedir (dir);
+	} else {
+		/* could not open directory */
+		perror ("");
+		return 1;
+	}
 
     return 0;
 }
 
-void detectAndCut( Mat& img, CascadeClassifier& cascade,
+void detectAndCut(Mat& img, CascadeClassifier& cascade,
                     CascadeClassifier& nestedCascade,
-                    double scale, bool tryflip )
+                    double scale, bool tryflip, char *imageName)
 {
     int i = 0;
+    double t = 0;
     vector<Rect> faces, faces2;
+    const static Scalar colors[] =  { CV_RGB(0,0,255),
+        CV_RGB(0,128,255),
+        CV_RGB(0,255,255),
+        CV_RGB(0,255,0),
+        CV_RGB(255,128,0),
+        CV_RGB(255,255,0),
+        CV_RGB(255,0,0),
+        CV_RGB(255,0,255)} ;
     Mat gray, smallImg( cvRound (img.rows/scale), cvRound(img.cols/scale), CV_8UC1 );
 
     cvtColor( img, gray, COLOR_BGR2GRAY );
     resize( gray, smallImg, smallImg.size(), 0, 0, INTER_LINEAR );
     equalizeHist( smallImg, smallImg );
 
-    cascade.detectMultiScale( smallImg, faces, 1.1, 2, 0 | CASCADE_SCALE_IMAGE, Size(30, 30) );
+    cascade.detectMultiScale( smallImg, faces,
+        1.1, 2, 0
+        //|CASCADE_FIND_BIGGEST_OBJECT
+        //|CASCADE_DO_ROUGH_SEARCH
+        |CASCADE_SCALE_IMAGE
+        ,
+        Size(30, 30) );
     if( tryflip )
     {
         flip(smallImg, smallImg, 1);
@@ -94,11 +102,13 @@ void detectAndCut( Mat& img, CascadeClassifier& cascade,
         Mat smallImgROI;
         vector<Rect> nestedObjects;
 		smallImgROI = smallImg(*r);
-		string face = "face_";
+		string directoryName = "faces/";
+		string face = "face";
+		string separator = "_";
 		string ext = ".png";
 		char numstr[8];
 		sprintf(numstr, "%d", i);
-		string filename = face + numstr + ext;
+		string filename = directoryName + face + separator + imageName + separator + numstr + ext;
 		imwrite(filename, smallImgROI);
         if( nestedCascade.empty() )
             continue;
